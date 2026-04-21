@@ -3,8 +3,18 @@ import express from "express";
 import { HealthLog } from "../models/HealthLog.js";
 import { User } from "../models/User.js";
 import { listToClient, toClient } from "../utils/serialize.js";
+import { healthLogCreateSchema } from "../utils/validation.js";
 
 export const router = express.Router();
+
+function parseOrError(schema, payload) {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    const message = result.error.issues[0]?.message || "Invalid input";
+    return { error: message };
+  }
+  return { data: result.data };
+}
 
 router.get("/", async (req, res) => {
   const logs = await HealthLog.find({ userId: req.userId }).sort({ date: 1 });
@@ -13,7 +23,10 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { weight, height, notes, date } = req.body;
+    const parsed = parseOrError(healthLogCreateSchema, req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+    const { weight, height, notes, date } = parsed.data;
     const heightM = height / 100;
     const bmi = Number((weight / (heightM * heightM)).toFixed(2));
 

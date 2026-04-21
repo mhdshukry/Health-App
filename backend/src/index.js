@@ -1,10 +1,13 @@
 import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import mongoose from "mongoose";
 import morgan from "morgan";
 
 import { config } from "./config.js";
 import { auth } from "./middleware/auth.js";
+import { errorHandler } from "./middleware/error_handler.js";
 import { router as activitiesRouter } from "./routes/activities.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as goalsRouter } from "./routes/goals.js";
@@ -14,11 +17,21 @@ import { router as remindersRouter } from "./routes/reminders.js";
 import { router as syncRouter } from "./routes/sync.js";
 import { router as tipsRouter } from "./routes/tips.js";
 import { Tip } from "./models/Tip.js";
+import { logInfo } from "./utils/logger.js";
 
 const app = express();
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+app.use("/api", apiLimiter);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
@@ -30,6 +43,8 @@ app.use("/api/health-logs", auth, healthLogsRouter);
 app.use("/api/goals", auth, goalsRouter);
 app.use("/api/reminders", auth, remindersRouter);
 app.use("/api/tips", auth, tipsRouter);
+
+app.use(errorHandler);
 
 async function seedTips() {
   const count = await Tip.countDocuments();
@@ -77,12 +92,10 @@ async function start() {
     await mongoose.connect(config.mongoUri, { dbName: "wellness_hub" });
     await seedTips();
     app.listen(config.port, () => {
-      // eslint-disable-next-line no-console
-      console.log(`API ready on port ${config.port}`);
+      logInfo("api_ready", { port: config.port });
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to start server", err);
+    logInfo("api_start_failed", { error: err?.message || String(err) });
     process.exit(1);
   }
 }

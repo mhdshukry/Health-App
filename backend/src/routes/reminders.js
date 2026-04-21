@@ -2,8 +2,18 @@ import express from "express";
 
 import { Reminder } from "../models/Reminder.js";
 import { listToClient, toClient } from "../utils/serialize.js";
+import { reminderCreateSchema } from "../utils/validation.js";
 
 export const router = express.Router();
+
+function parseOrError(schema, payload) {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    const message = result.error.issues[0]?.message || "Invalid input";
+    return { error: message };
+  }
+  return { data: result.data };
+}
 
 router.get("/", async (req, res) => {
   const reminders = await Reminder.find({ userId: req.userId }).sort({
@@ -14,7 +24,10 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { title, message, scheduledTime, repeat } = req.body;
+    const parsed = parseOrError(reminderCreateSchema, req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+    const { title, message, scheduledTime, repeat } = parsed.data;
     const reminder = await Reminder.create({
       userId: req.userId,
       title,
