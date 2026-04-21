@@ -54,6 +54,15 @@ The backend reads these values from `.env`:
 - `PORT` - API port, defaults to `4000`
 - `MONGO_URI` - MongoDB connection string, defaults to `mongodb://localhost:27017/wellness_hub`
 - `JWT_SECRET` - JWT signing secret, defaults to `change-me`
+- `JWT_REFRESH_SECRET` - refresh token signing secret, defaults to `change-me-refresh`
+- `JWT_ACCESS_TTL` - access token lifetime, defaults to `15m`
+- `JWT_REFRESH_TTL` - refresh token lifetime, defaults to `30d`
+- `SMTP_HOST` - SMTP host for password reset emails
+- `SMTP_PORT` - SMTP port, defaults to `587`
+- `SMTP_USER` - SMTP username
+- `SMTP_PASS` - SMTP password
+- `SMTP_FROM` - email sender, defaults to `no-reply@wellness-hub.local`
+- `APP_BASE_URL` - app URL used in reset links, defaults to `http://localhost:3000`
 
 Example `backend/.env`:
 
@@ -61,6 +70,15 @@ Example `backend/.env`:
 PORT=4000
 MONGO_URI=mongodb://localhost:27017/wellness_hub
 JWT_SECRET=replace-with-a-long-random-secret
+JWT_REFRESH_SECRET=replace-with-a-long-random-secret
+JWT_ACCESS_TTL=15m
+JWT_REFRESH_TTL=30d
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-user
+SMTP_PASS=your-pass
+SMTP_FROM=no-reply@wellness-hub.local
+APP_BASE_URL=http://localhost:3000
 ```
 
 ## API Overview
@@ -68,7 +86,12 @@ JWT_SECRET=replace-with-a-long-random-secret
 The backend exposes these routes under `/api`:
 
 - `GET /api/health`
-- `POST /api/auth` and related auth routes
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/password-reset`
+- `POST /api/auth/password-reset/confirm`
 - `GET /api/sync`
 - `GET /api/profile`
 - `GET /api/activities`
