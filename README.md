@@ -83,4 +83,3 @@ Most routes require a Bearer token. The backend seeds default tips on first star
 
 - The root `.gitignore` excludes `backend/node_modules/`, `backend/.env`, and `Health.db`.
 - If you change the backend port or MongoDB URI, update the mobile app’s API configuration accordingly.
-
