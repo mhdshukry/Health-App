@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config.dart';
 import '../core/network/api_service.dart';
+import '../core/notifications/notification_service.dart';
 import '../models/entities.dart';
 
 final wellnessControllerProvider =
@@ -19,6 +20,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
   Future<WellnessState> build() async {
     _prefs = await SharedPreferences.getInstance();
     _api = ApiService(_prefs);
+    await _api.init();
 
     final cached = await _loadCachedState();
 
@@ -91,7 +93,10 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       {required String email, required String password}) async {
     try {
       final response = await _api.login(email: email, password: password);
-      await _api.setToken(response['token'] as String);
+      await _api.setAuthTokens(
+        accessToken: response['token'] as String,
+        refreshToken: response['refreshToken'] as String,
+      );
       final next = _stateFromPayload(response, onboardingSeen: true);
       await _persist(next);
       return null;
@@ -119,7 +124,10 @@ class WellnessController extends AsyncNotifier<WellnessState> {
         height: height,
         weight: weight,
       );
-      await _api.setToken(response['token'] as String);
+      await _api.setAuthTokens(
+        accessToken: response['token'] as String,
+        refreshToken: response['refreshToken'] as String,
+      );
       final next = _stateFromPayload(response, onboardingSeen: true);
       await _persist(next);
       return null;
@@ -133,13 +141,51 @@ class WellnessController extends AsyncNotifier<WellnessState> {
     if (raw.contains('SocketException')) {
       return 'Cannot reach server. Make sure the backend is running at $apiBaseUrl and the emulator is online.';
     }
+    if (raw.contains('Invalid email or password')) {
+      return 'Invalid email or password.';
+    }
+    if (raw.contains('Missing token')) {
+      return 'You are signed out. Please login again.';
+    }
+    if (raw.contains('Invalid or expired')) {
+      return 'Your session expired. Please login again.';
+    }
+    if (raw.contains('Email already in use')) {
+      return 'This email is already in use.';
+    }
+    if (raw.contains('Password must be at least')) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (raw.contains('Name is required') || raw.contains('Valid email is required')) {
+      return raw;
+    }
     return raw;
   }
 
   Future<void> logout() async {
-    await _api.clearToken();
+    await _api.logout();
     await _prefs.remove(_storageKey);
     state = AsyncData(WellnessState.initial());
+  }
+
+  Future<PasswordResetResult> requestPasswordReset(
+      {required String email}) async {
+    try {
+      final response = await _api.requestPasswordReset(email: email);
+      return PasswordResetResult(token: response['resetToken'] as String?);
+    } catch (e) {
+      return PasswordResetResult(error: _friendlyError(e));
+    }
+  }
+
+  Future<String?> confirmPasswordReset(
+      {required String token, required String newPassword}) async {
+    try {
+      await _api.confirmPasswordReset(token: token, password: newPassword);
+      return null;
+    } catch (e) {
+      return _friendlyError(e);
+    }
   }
 
   double calculateBmi(double weightKg, double heightCm) {
@@ -163,7 +209,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
           current.copyWith(currentUser: updatedUser, users: [updatedUser]));
       return null;
     } catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      return _friendlyError(e);
     }
   }
 
@@ -192,7 +238,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
           current.copyWith(activities: [...current.activities, activity]));
       return null;
     } catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      return _friendlyError(e);
     }
   }
 
@@ -204,7 +250,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
           activities: current.activities.where((e) => e.id != id).toList()));
       return null;
     } catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      return _friendlyError(e);
     }
   }
 
@@ -228,7 +274,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       ));
       return null;
     } catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      return _friendlyError(e);
     }
   }
 
@@ -252,7 +298,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       await _persist(current.copyWith(goals: [...current.goals, goal]));
       return null;
     } catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      return _friendlyError(e);
     }
   }
 
@@ -288,6 +334,12 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       final current = state.requireValue;
       await _persist(
           current.copyWith(reminders: [...current.reminders, reminder]));
+
+      // Schedule notification if active
+      if (reminder.isActive) {
+        await _scheduleReminderNotification(reminder);
+      }
+
       return null;
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
@@ -304,10 +356,52 @@ class WellnessController extends AsyncNotifier<WellnessState> {
           .map((r) => r.id == updated.id ? updated : r)
           .toList();
       await _persist(current.copyWith(reminders: reminders));
+
+      if (updated.isActive) {
+        await _scheduleReminderNotification(updated);
+      } else {
+        await NotificationService().cancelAll(); // In a real app we'd keep map of IDs
+      }
+
       return null;
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
     }
+  }
+
+  Future<void> _scheduleReminderNotification(Reminder reminder) async {
+    // Parse hh:mm a from reminder.scheduledTime (e.g. 08:30 AM)
+    var timeStr = reminder.scheduledTime;
+    final isPM = timeStr.toUpperCase().contains('PM');
+    timeStr = timeStr.replaceAll(RegExp(r'[a-zA-Z\s]'), '');
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return;
+    
+    var hour = int.tryParse(parts[0]) ?? 8;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    
+    if (isPM && hour < 12) hour += 12;
+    if (!isPM && hour == 12) hour = 0;
+    
+    final now = DateTime.now();
+    var scheduledDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+
+    if (scheduledDate.isBefore(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+
+    await NotificationService().scheduleNotification(
+      id: reminder.id.hashCode,
+      title: reminder.title,
+      body: reminder.message,
+      scheduledDate: scheduledDate,
+    );
   }
 
   List<Activity> userActivities(WellnessState state) =>
@@ -335,6 +429,13 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       : state.reminders
           .where((e) => e.userId == state.currentUser!.id)
           .toList();
+}
+
+class PasswordResetResult {
+  const PasswordResetResult({this.token, this.error});
+
+  final String? token;
+  final String? error;
 }
 
 extension<T> on Iterable<T> {

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/theme/app_theme.dart';
+import 'core/notifications/notification_service.dart';
 import 'features/activities/activities_screen.dart';
 import 'features/analytics/analytics_screen.dart';
 import 'features/auth/login_screen.dart';
+import 'features/auth/password_reset_screen.dart';
 import 'features/auth/register_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/goals/goals_screen.dart';
@@ -19,7 +21,9 @@ import 'features/splash/splash_screen.dart';
 import 'features/tips/tips_screen.dart';
 import 'state/wellness_controller.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   runApp(const ProviderScope(child: WellnessHubApp()));
 }
 
@@ -65,6 +69,12 @@ class WellnessHubApp extends ConsumerWidget {
             GoRoute(
               path: '/login',
               builder: (context, _) => const LoginScreen(),
+            ),
+            GoRoute(
+              path: '/password-reset',
+              builder: (context, state) => PasswordResetScreen(
+                initialToken: state.uri.queryParameters['token'],
+              ),
             ),
             GoRoute(
               path: '/register',
@@ -118,6 +128,7 @@ class WellnessHubApp extends ConsumerWidget {
               '/splash',
               '/onboarding',
               '/login',
+              '/password-reset',
               '/register',
             }.contains(location);
 

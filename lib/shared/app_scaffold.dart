@@ -19,10 +19,19 @@ class AppScaffold extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       backgroundColor: AppColors.background,
-      floatingActionButton: floatingActionButton,
+      floatingActionButton: floatingActionButton != null
+          ? Padding(
+              padding: const EdgeInsets.only(
+                  bottom: 72.0), // Lift above floating nav bar
+              child: floatingActionButton,
+            )
+          : null,
       body: SafeArea(
+        bottom:
+            false, // Don't restrict bottom safe area here, as we extend body in shell
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          // Ensure enough padding at the bottom so content isn't blocked by the floating nav bar
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           child: child,
         ),
       ),

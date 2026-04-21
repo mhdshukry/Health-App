@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../shared/app_scaffold.dart';
 import '../../shared/widgets.dart';
 import '../../state/wellness_controller.dart';
@@ -16,9 +17,13 @@ class RemindersScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Reminders',
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddReminder(context, ref),
-        child: const Icon(Icons.add_alert_outlined),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          NotificationService().init(); // Ask permission manually via plugin on add first reminder
+          _showAddReminder(context, ref);
+        },
+        label: const Text('Add Reminder'),
+        icon: const Icon(Icons.add_alert_outlined),
       ),
       child: items.isEmpty
           ? const EmptyState(
@@ -32,10 +37,26 @@ class RemindersScreen extends ConsumerWidget {
                 final reminder = items[index];
                 return SectionCard(
                   child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(reminder.title),
-                    subtitle: Text(
-                        '${reminder.message}\n${reminder.scheduledTime} · ${reminder.repeat}'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    title: Text(reminder.title, style: Theme.of(context).textTheme.titleMedium),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(reminder.message),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text('${reminder.scheduledTime} · ${reminder.repeat}',
+                                  style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                     value: reminder.isActive,
                     onChanged: (_) => controller.toggleReminder(reminder.id),
                   ),

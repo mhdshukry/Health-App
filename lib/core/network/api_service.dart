@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,23 +8,50 @@ import '../config.dart';
 
 class ApiService {
   ApiService(this._prefs) {
-    _token = _prefs.getString(_tokenKey);
+    _token = null;
+    _refreshToken = null;
   }
 
   static const _tokenKey = 'auth_token';
+  static const _refreshTokenKey = 'refresh_token';
   final SharedPreferences _prefs;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final http.Client _client = http.Client();
   String? _token;
+  String? _refreshToken;
 
   String? get token => _token;
+  String? get refreshToken => _refreshToken;
 
-  Future<void> setToken(String token) async {
-    _token = token;
-    await _prefs.setString(_tokenKey, token);
+  Future<void> init() async {
+    _token = await _secureStorage.read(key: _tokenKey);
+    _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+
+    if (_token == null) {
+      final legacy = _prefs.getString(_tokenKey);
+      if (legacy != null && legacy.isNotEmpty) {
+        _token = legacy;
+        await _secureStorage.write(key: _tokenKey, value: legacy);
+        await _prefs.remove(_tokenKey);
+      }
+    }
   }
 
-  Future<void> clearToken() async {
+  Future<void> setAuthTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    _token = accessToken;
+    _refreshToken = refreshToken;
+    await _secureStorage.write(key: _tokenKey, value: accessToken);
+    await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+  }
+
+  Future<void> clearAuthTokens() async {
     _token = null;
+    _refreshToken = null;
+    await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
     await _prefs.remove(_tokenKey);
   }
 
@@ -33,6 +61,7 @@ class ApiService {
     String path, {
     String method = 'GET',
     Map<String, dynamic>? body,
+    bool retryOnAuth = true,
   }) async {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -62,6 +91,12 @@ class ApiService {
     }
 
     if (response.body.isEmpty) {
+      if (response.statusCode == 401 && retryOnAuth) {
+        final refreshed = await _refreshAccessToken();
+        if (refreshed) {
+          return _request(path, method: method, body: body, retryOnAuth: false);
+        }
+      }
       if (response.statusCode >= 400) {
         throw Exception('Request failed (${response.statusCode})');
       }
@@ -69,10 +104,49 @@ class ApiService {
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 401 && retryOnAuth) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        return _request(path, method: method, body: body, retryOnAuth: false);
+      }
+    }
     if (response.statusCode >= 400) {
       throw Exception((decoded['error'] ?? 'Request failed') as String);
     }
     return decoded;
+  }
+
+  Future<bool> _refreshAccessToken() async {
+    if (_refreshToken == null) return false;
+    try {
+      final response = await _client.post(
+        _uri('/api/auth/refresh'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': _refreshToken}),
+      );
+
+      if (response.statusCode >= 400) {
+        await clearAuthTokens();
+        return false;
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final accessToken = decoded['token'] as String?;
+      final refreshToken = decoded['refreshToken'] as String?;
+      if (accessToken == null || refreshToken == null) {
+        await clearAuthTokens();
+        return false;
+      }
+
+      await setAuthTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+      return true;
+    } catch (_) {
+      await clearAuthTokens();
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>> login(
@@ -101,6 +175,30 @@ class ApiService {
       'height': height,
       'weight': weight,
     });
+  }
+
+  Future<Map<String, dynamic>> requestPasswordReset({required String email}) {
+    return _request('/api/auth/password-reset', method: 'POST', body: {
+      'email': email,
+    });
+  }
+
+  Future<Map<String, dynamic>> confirmPasswordReset({
+    required String token,
+    required String password,
+  }) {
+    return _request('/api/auth/password-reset/confirm', method: 'POST', body: {
+      'token': token,
+      'password': password,
+    });
+  }
+
+  Future<void> logout() async {
+    try {
+      await _request('/api/auth/logout', method: 'POST', retryOnAuth: false);
+    } finally {
+      await clearAuthTokens();
+    }
   }
 
   Future<Map<String, dynamic>> syncState() => _request('/api/sync');
