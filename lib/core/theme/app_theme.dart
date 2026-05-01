@@ -14,6 +14,12 @@ class AppColors {
 
 class AppTheme {
   static const scaffoldColor = AppColors.background;
+  static const List<String> fontFallbacks = [
+    'Segoe UI',
+    'Arial',
+    'Helvetica',
+    'sans-serif',
+  ];
 
   static ThemeData get darkTheme {
     final colorScheme = ColorScheme.fromSeed(
@@ -32,7 +38,8 @@ class AppTheme {
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
-      fontFamily: 'Lufga',
+      fontFamily: 'Segoe UI',
+      fontFamilyFallback: fontFallbacks,
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.white,

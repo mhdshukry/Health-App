@@ -70,7 +70,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                         final result = await ref
                             .read(wellnessControllerProvider.notifier)
                             .requestPasswordReset(email: _email.text.trim());
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         setState(() => _loadingRequest = false);
                         if (result.error != null) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +124,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                               token: _token.text.trim(),
                               newPassword: _newPassword.text.trim(),
                             );
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         setState(() => _loadingConfirm = false);
                         if (error != null) {
                           ScaffoldMessenger.of(context).showSnackBar(

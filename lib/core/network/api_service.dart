@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -56,6 +57,8 @@ class ApiService {
   }
 
   Uri _uri(String path) => Uri.parse('$apiBaseUrl$path');
+
+  String _utcIso(DateTime value) => value.toUtc().toIso8601String();
 
   Future<Map<String, dynamic>> _request(
     String path, {
@@ -235,7 +238,7 @@ class ApiService {
       'distance': distance,
       'calories': calories,
       'notes': notes,
-      'date': date.toIso8601String(),
+      'date': _utcIso(date),
     });
   }
 
@@ -252,7 +255,7 @@ class ApiService {
       'weight': weight,
       'height': height,
       'notes': notes,
-      'date': date.toIso8601String(),
+      'date': _utcIso(date),
     });
   }
 
@@ -268,7 +271,7 @@ class ApiService {
       'goalType': goalType,
       'targetValue': targetValue,
       'currentValue': currentValue,
-      'targetDate': targetDate.toIso8601String(),
+      'targetDate': _utcIso(targetDate),
     });
   }
 
@@ -296,4 +299,163 @@ class ApiService {
       _request('/api/reminders/$id/toggle', method: 'PATCH');
 
   Future<Map<String, dynamic>> fetchTips() => _request('/api/tips');
+
+  Future<Map<String, dynamic>> fetchExternalTips() async {
+    try {
+      return await _request('/api/tips/external');
+    } catch (_) {
+      if (kIsWeb) {
+        return _fallbackTips();
+      }
+    }
+
+    try {
+      return await _fetchMyHealthfinderDirect();
+    } catch (_) {
+      return _fallbackTips();
+    }
+  }
+
+  Future<Map<String, dynamic>> _fallbackTips() async {
+    try {
+      final response = await fetchTips();
+      return {
+        'tips': response['tips'] ?? const [],
+        'sourceFallback': true,
+      };
+    } catch (_) {
+      return {'tips': const [], 'sourceFallback': true};
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchMyHealthfinderDirect() async {
+    const base = 'https://odphp.health.gov/myhealthfinder/api/v4';
+    final listResponse = await _client
+        .get(Uri.parse('$base/itemlist.json?Type=topic'))
+        .timeout(const Duration(seconds: 15));
+    if (listResponse.statusCode >= 400) {
+      throw Exception('External health tips API failed');
+    }
+
+    final listPayload = jsonDecode(listResponse.body) as Map<String, dynamic>;
+    final rawItems = _readPath<List<dynamic>>(
+      listPayload,
+      const ['Result', 'Items', 'Item'],
+    );
+    final items = (rawItems ?? const <dynamic>[]).take(8).toList();
+
+    final tips = <Map<String, dynamic>>[];
+    for (final item in items) {
+      final itemMap = Map<String, dynamic>.from(item as Map);
+      final topicId = itemMap['Id']?.toString();
+      if (topicId == null || topicId.isEmpty) continue;
+
+      final detailResponse = await _client
+          .get(Uri.parse('$base/topicsearch.json?TopicId=$topicId'))
+          .timeout(const Duration(seconds: 15));
+      if (detailResponse.statusCode >= 400) continue;
+
+      final detailPayload =
+          jsonDecode(detailResponse.body) as Map<String, dynamic>;
+      final resources = _readPath<dynamic>(
+        detailPayload,
+        const ['Result', 'Resources', 'Resource'],
+      );
+      final resource = _firstMap(resources);
+      if (resource == null) continue;
+
+      final sections = resource['Sections'];
+      final firstSection =
+          _firstMap(sections is Map ? sections['section'] : null);
+      final content = _cleanHtml(firstSection?['Content']?.toString() ?? '');
+      final summary = _firstSentence(content).isEmpty
+          ? 'Read evidence-based guidance about ${resource['Title']}.'
+          : _firstSentence(content);
+
+      tips.add({
+        'id': 'myhealthfinder-${resource['Id']}',
+        'title': resource['Title']?.toString() ?? 'Health Tip',
+        'category': resource['Categories']?.toString() ?? 'Health',
+        'summary': summary,
+        'content': _truncate(content.isEmpty ? summary : content, 420),
+        'source': 'ODPHP MyHealthfinder External API',
+      });
+    }
+
+    return {'tips': tips};
+  }
+
+  Future<Map<String, dynamic>> addVitalLog({
+    required String category,
+    double? systolic,
+    double? diastolic,
+    double? heartRate,
+    double? bloodGlucose,
+    double? oxygenSaturation,
+    double? temperature,
+    double? waterMl,
+    double? sleepHours,
+    String? mood,
+    double? painLevel,
+    required String notes,
+    required DateTime date,
+  }) {
+    return _request('/api/vitals', method: 'POST', body: {
+      'category': category,
+      if (systolic != null) 'systolic': systolic,
+      if (diastolic != null) 'diastolic': diastolic,
+      if (heartRate != null) 'heartRate': heartRate,
+      if (bloodGlucose != null) 'bloodGlucose': bloodGlucose,
+      if (oxygenSaturation != null) 'oxygenSaturation': oxygenSaturation,
+      if (temperature != null) 'temperature': temperature,
+      if (waterMl != null) 'waterMl': waterMl,
+      if (sleepHours != null) 'sleepHours': sleepHours,
+      if (mood != null) 'mood': mood,
+      if (painLevel != null) 'painLevel': painLevel,
+      'notes': notes,
+      'date': _utcIso(date),
+    });
+  }
+
+  T? _readPath<T>(Map<String, dynamic> map, List<String> path) {
+    dynamic current = map;
+    for (final key in path) {
+      if (current is! Map) return null;
+      current = current[key];
+    }
+    return current is T ? current : null;
+  }
+
+  Map<String, dynamic>? _firstMap(dynamic value) {
+    if (value is List && value.isNotEmpty) {
+      return Map<String, dynamic>.from(value.first as Map);
+    }
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  String _cleanHtml(String value) {
+    return value
+        .replaceAll(
+            RegExp(r'<script[\s\S]*?</script>', caseSensitive: false), ' ')
+        .replaceAll(
+            RegExp(r'<style[\s\S]*?</style>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String _firstSentence(String value) {
+    final match = RegExp(r'^(.{40,220}?[.!?])\s').firstMatch(value);
+    return match?.group(1) ?? _truncate(value, 180);
+  }
+
+  String _truncate(String value, int maxLength) {
+    if (value.length <= maxLength) return value;
+    return '${value.substring(0, maxLength - 1).trim()}...';
+  }
 }

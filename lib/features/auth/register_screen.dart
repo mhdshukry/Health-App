@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/form_options.dart';
 import '../../state/wellness_controller.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -17,9 +18,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _age = TextEditingController();
-  final _gender = TextEditingController();
   final _height = TextEditingController();
   final _weight = TextEditingController();
+  String _gender = genderOptions.first;
   bool _submitting = false;
 
   @override
@@ -28,7 +29,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _email.dispose();
     _password.dispose();
     _age.dispose();
-    _gender.dispose();
     _height.dispose();
     _weight.dispose();
     super.dispose();
@@ -57,15 +57,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 _field(_email, 'Email', email: true, hint: 'name@email.com'),
                 const SizedBox(height: 12),
                 _field(_password, 'Password',
-                    obscure: true, hint: 'At least 6 characters'),
+                    obscure: true, hint: 'At least 8 characters'),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                         child: _field(_age, 'Age', number: true, hint: '24')),
                     const SizedBox(width: 12),
-                    Expanded(
-                        child: _field(_gender, 'Gender', hint: 'Male/Female')),
+                    Expanded(child: _genderField()),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -96,7 +95,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             height = double.parse(_height.text.trim());
                             weight = double.parse(_weight.text.trim());
                           } catch (_) {
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text('Please enter valid numbers.')),
@@ -113,12 +112,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 email: _email.text.trim(),
                                 password: _password.text.trim(),
                                 age: age,
-                                gender: _gender.text.trim(),
+                                gender: _gender,
                                 height: height,
                                 weight: weight,
                               );
 
-                          if (!mounted) return;
+                          if (!context.mounted) return;
 
                           setState(() => _submitting = false);
 
@@ -167,8 +166,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       validator: (value) {
         if (value == null || value.trim().isEmpty) return 'Required';
         if (email && !value.contains('@')) return 'Enter a valid email';
-        if (obscure && value.length < 6) return 'Minimum 6 characters';
+        if (obscure && value.length < 8) return 'Minimum 8 characters';
         return null;
+      },
+    );
+  }
+
+  Widget _genderField() {
+    return DropdownButtonFormField<String>(
+      value: _gender,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Gender'),
+      items: genderOptions
+          .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+          .toList(),
+      onChanged: (value) {
+        if (value != null) setState(() => _gender = value);
       },
     );
   }

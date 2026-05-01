@@ -17,10 +17,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int index = 0;
 
   final slides = const [
-    _SlideData(icon: Icons.monitor_heart_outlined, title: 'Track your health', subtitle: 'Monitor steps, workouts, weight, and BMI in one place.'),
-    _SlideData(icon: Icons.flag_outlined, title: 'Manage your goals', subtitle: 'Set measurable wellness goals and watch your progress grow.'),
-    _SlideData(icon: Icons.notifications_active_outlined, title: 'Get smart reminders', subtitle: 'Keep routines consistent with reminder schedules that fit your day.'),
-    _SlideData(icon: Icons.insights_outlined, title: 'View analytics and tips', subtitle: 'Use visual charts and curated health tips to improve decisions.'),
+    _SlideData(
+        icon: Icons.monitor_heart_outlined,
+        title: 'Track your health',
+        subtitle: 'Monitor steps, workouts, weight, and BMI in one place.'),
+    _SlideData(
+        icon: Icons.flag_outlined,
+        title: 'Manage your goals',
+        subtitle:
+            'Set measurable wellness goals and watch your progress grow.'),
+    _SlideData(
+        icon: Icons.notifications_active_outlined,
+        title: 'Get smart reminders',
+        subtitle:
+            'Keep routines consistent with reminder schedules that fit your day.'),
+    _SlideData(
+        icon: Icons.insights_outlined,
+        title: 'View analytics and tips',
+        subtitle:
+            'Use visual charts and curated health tips to improve decisions.'),
   ];
 
   @override
@@ -37,8 +52,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () async {
-                    await ref.read(wellnessControllerProvider.notifier).completeOnboarding();
-                    if (mounted) context.go('/login');
+                    await ref
+                        .read(wellnessControllerProvider.notifier)
+                        .completeOnboarding();
+                    if (context.mounted) context.go('/login');
                   },
                   child: const Text('Skip'),
                 ),
@@ -61,12 +78,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             borderRadius: BorderRadius.circular(42),
                             border: Border.all(color: AppColors.border),
                           ),
-                          child: Icon(slide.icon, color: AppColors.primary, size: 84),
+                          child: Icon(slide.icon,
+                              color: AppColors.primary, size: 84),
                         ),
                         const SizedBox(height: 28),
-                        Text(slide.title, style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
+                        Text(slide.title,
+                            style: Theme.of(context).textTheme.headlineMedium,
+                            textAlign: TextAlign.center),
                         const SizedBox(height: 14),
-                        Text(slide.subtitle, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.muted)),
+                        Text(slide.subtitle,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: AppColors.muted)),
                       ],
                     );
                   },
@@ -92,10 +117,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (isLast) {
-                    await ref.read(wellnessControllerProvider.notifier).completeOnboarding();
-                    if (mounted) context.go('/login');
+                    await ref
+                        .read(wellnessControllerProvider.notifier)
+                        .completeOnboarding();
+                    if (context.mounted) context.go('/login');
                   } else {
-                    _controller.nextPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+                    _controller.nextPage(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOut);
                   }
                 },
                 child: Text(isLast ? 'Get Started' : 'Next'),
@@ -109,7 +138,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 }
 
 class _SlideData {
-  const _SlideData({required this.icon, required this.title, required this.subtitle});
+  const _SlideData(
+      {required this.icon, required this.title, required this.subtitle});
   final IconData icon;
   final String title;
   final String subtitle;
