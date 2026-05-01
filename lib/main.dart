@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,11 +20,14 @@ import 'features/settings/settings_screen.dart';
 import 'features/shell/dashboard_shell.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/tips/tips_screen.dart';
+import 'features/vitals/vitals_screen.dart';
 import 'state/wellness_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService().init();
+  if (!kIsWeb) {
+    await NotificationService().init();
+  }
   runApp(const ProviderScope(child: WellnessHubApp()));
 }
 
@@ -32,9 +36,18 @@ class WellnessHubApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stateAsync = ref.watch(wellnessControllerProvider);
+    final gateAsync = ref.watch(
+      wellnessControllerProvider.select(
+        (state) => state.whenData(
+          (value) => _AppRouteGate(
+            onboardingSeen: value.onboardingSeen,
+            isLoggedIn: value.currentUser != null,
+          ),
+        ),
+      ),
+    );
 
-    return stateAsync.when(
+    return gateAsync.when(
       loading: () => MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
@@ -54,7 +67,7 @@ class WellnessHubApp extends ConsumerWidget {
           ),
         ),
       ),
-      data: (state) {
+      data: (gate) {
         final router = GoRouter(
           initialLocation: '/splash',
           routes: [
@@ -107,20 +120,24 @@ class WellnessHubApp extends ConsumerWidget {
                   GoRoute(
                       path: '/profile',
                       builder: (_, __) => const ProfileScreen()),
+                  GoRoute(
+                      path: '/health-logs',
+                      builder: (_, __) => const HealthLogsScreen()),
+                  GoRoute(
+                      path: '/analytics',
+                      builder: (_, __) => const AnalyticsScreen()),
+                  GoRoute(
+                      path: '/reminders',
+                      builder: (_, __) => const RemindersScreen()),
+                  GoRoute(
+                      path: '/settings',
+                      builder: (_, __) => const SettingsScreen()),
+                  GoRoute(
+                      path: '/vitals',
+                      builder: (_, __) => const VitalsScreen()),
                 ]),
               ],
             ),
-            GoRoute(
-                path: '/health-logs',
-                builder: (_, __) => const HealthLogsScreen()),
-            GoRoute(
-                path: '/analytics',
-                builder: (_, __) => const AnalyticsScreen()),
-            GoRoute(
-                path: '/reminders',
-                builder: (_, __) => const RemindersScreen()),
-            GoRoute(
-                path: '/settings', builder: (_, __) => const SettingsScreen()),
           ],
           redirect: (context, routeState) {
             final location = routeState.uri.path;
@@ -132,17 +149,17 @@ class WellnessHubApp extends ConsumerWidget {
               '/register',
             }.contains(location);
 
-            if (!state.onboardingSeen &&
+            if (!gate.onboardingSeen &&
                 location != '/splash' &&
                 location != '/onboarding') {
               return '/onboarding';
             }
 
-            if (state.currentUser == null && !isPublic) {
+            if (!gate.isLoggedIn && !isPublic) {
               return '/login';
             }
 
-            if (state.currentUser != null &&
+            if (gate.isLoggedIn &&
                 (location == '/login' || location == '/register')) {
               return '/home';
             }
@@ -160,4 +177,24 @@ class WellnessHubApp extends ConsumerWidget {
       },
     );
   }
+}
+
+class _AppRouteGate {
+  const _AppRouteGate({
+    required this.onboardingSeen,
+    required this.isLoggedIn,
+  });
+
+  final bool onboardingSeen;
+  final bool isLoggedIn;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _AppRouteGate &&
+        other.onboardingSeen == onboardingSeen &&
+        other.isLoggedIn == isLoggedIn;
+  }
+
+  @override
+  int get hashCode => Object.hash(onboardingSeen, isLoggedIn);
 }

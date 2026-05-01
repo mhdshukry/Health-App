@@ -136,6 +136,15 @@ class HealthLog {
   final String notes;
   final String date;
 
+  String get bmiCategory {
+    if (bmi < 18.5) return 'Under';
+    if (bmi < 25) return 'Normal';
+    if (bmi < 30) return 'Over';
+    return 'High';
+  }
+
+  bool get isBmiInHealthyRange => bmi >= 18.5 && bmi < 25;
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'userId': userId,
@@ -259,6 +268,78 @@ class Reminder {
       );
 }
 
+class VitalLog {
+  VitalLog({
+    required this.id,
+    required this.userId,
+    required this.category,
+    this.systolic,
+    this.diastolic,
+    this.heartRate,
+    this.bloodGlucose,
+    this.oxygenSaturation,
+    this.temperature,
+    this.waterMl,
+    this.sleepHours,
+    this.mood,
+    this.painLevel,
+    required this.notes,
+    required this.date,
+  });
+
+  final String id;
+  final String userId;
+  final String category;
+  final double? systolic;
+  final double? diastolic;
+  final double? heartRate;
+  final double? bloodGlucose;
+  final double? oxygenSaturation;
+  final double? temperature;
+  final double? waterMl;
+  final double? sleepHours;
+  final String? mood;
+  final double? painLevel;
+  final String notes;
+  final String date;
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'userId': userId,
+        'category': category,
+        'systolic': systolic,
+        'diastolic': diastolic,
+        'heartRate': heartRate,
+        'bloodGlucose': bloodGlucose,
+        'oxygenSaturation': oxygenSaturation,
+        'temperature': temperature,
+        'waterMl': waterMl,
+        'sleepHours': sleepHours,
+        'mood': mood,
+        'painLevel': painLevel,
+        'notes': notes,
+        'date': date,
+      };
+
+  factory VitalLog.fromMap(Map<String, dynamic> map) => VitalLog(
+        id: map['id'],
+        userId: map['userId'],
+        category: map['category'],
+        systolic: (map['systolic'] as num?)?.toDouble(),
+        diastolic: (map['diastolic'] as num?)?.toDouble(),
+        heartRate: (map['heartRate'] as num?)?.toDouble(),
+        bloodGlucose: (map['bloodGlucose'] as num?)?.toDouble(),
+        oxygenSaturation: (map['oxygenSaturation'] as num?)?.toDouble(),
+        temperature: (map['temperature'] as num?)?.toDouble(),
+        waterMl: (map['waterMl'] as num?)?.toDouble(),
+        sleepHours: (map['sleepHours'] as num?)?.toDouble(),
+        mood: map['mood'] as String?,
+        painLevel: (map['painLevel'] as num?)?.toDouble(),
+        notes: map['notes'] ?? '',
+        date: map['date'],
+      );
+}
+
 class HealthTip {
   HealthTip({
     required this.id,
@@ -304,6 +385,7 @@ class WellnessState {
     required this.healthLogs,
     required this.goals,
     required this.reminders,
+    required this.vitals,
     required this.tips,
   });
 
@@ -314,6 +396,7 @@ class WellnessState {
   final List<HealthLog> healthLogs;
   final List<Goal> goals;
   final List<Reminder> reminders;
+  final List<VitalLog> vitals;
   final List<HealthTip> tips;
 
   factory WellnessState.initial() => WellnessState(
@@ -324,6 +407,7 @@ class WellnessState {
         healthLogs: [],
         goals: [],
         reminders: [],
+        vitals: [],
         tips: _seedTips,
       );
 
@@ -336,6 +420,7 @@ class WellnessState {
     List<HealthLog>? healthLogs,
     List<Goal>? goals,
     List<Reminder>? reminders,
+    List<VitalLog>? vitals,
     List<HealthTip>? tips,
   }) =>
       WellnessState(
@@ -346,6 +431,7 @@ class WellnessState {
         healthLogs: healthLogs ?? this.healthLogs,
         goals: goals ?? this.goals,
         reminders: reminders ?? this.reminders,
+        vitals: vitals ?? this.vitals,
         tips: tips ?? this.tips,
       );
 
@@ -357,6 +443,7 @@ class WellnessState {
         'healthLogs': healthLogs.map((e) => e.toMap()).toList(),
         'goals': goals.map((e) => e.toMap()).toList(),
         'reminders': reminders.map((e) => e.toMap()).toList(),
+        'vitals': vitals.map((e) => e.toMap()).toList(),
         'tips': tips.map((e) => e.toMap()).toList(),
       };
 
@@ -386,6 +473,9 @@ class WellnessState {
           .toList(),
       reminders: ((map['reminders'] ?? []) as List)
           .map((e) => Reminder.fromMap(Map<String, dynamic>.from(e)))
+          .toList(),
+      vitals: ((map['vitals'] ?? []) as List)
+          .map((e) => VitalLog.fromMap(Map<String, dynamic>.from(e)))
           .toList(),
       tips: ((map['tips'] ?? []) as List)
           .map((e) => HealthTip.fromMap(Map<String, dynamic>.from(e)))

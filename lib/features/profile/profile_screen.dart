@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/app_scaffold.dart';
+import '../../shared/form_options.dart';
 import '../../shared/widgets.dart';
 import '../../state/wellness_controller.dart';
 
@@ -23,7 +24,12 @@ class ProfileScreen extends ConsumerWidget {
           SectionCard(
             child: Column(
               children: [
-                CircleAvatar(radius: 36, child: Text(user.name.isEmpty ? '?' : user.name[0].toUpperCase())),
+                CircleAvatar(
+                  radius: 36,
+                  child: Text(
+                    user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Text(user.name, style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
@@ -42,7 +48,10 @@ class ProfileScreen extends ConsumerWidget {
             children: [
               StatTile(title: 'Age', value: '${user.age}'),
               StatTile(title: 'Gender', value: user.gender),
-              StatTile(title: 'Height', value: '${user.height.toStringAsFixed(0)} cm'),
+              StatTile(
+                title: 'Height',
+                value: '${user.height.toStringAsFixed(0)} cm',
+              ),
               StatTile(title: 'BMI', value: bmi.toStringAsFixed(2)),
             ],
           ),
@@ -73,6 +82,13 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.favorite_border),
+                  title: const Text('Vitals & wellness'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/vitals'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.notifications_outlined),
                   title: const Text('Reminders'),
                   trailing: const Icon(Icons.chevron_right),
@@ -96,42 +112,174 @@ class ProfileScreen extends ConsumerWidget {
   Future<void> _showEditProfile(BuildContext context, WidgetRef ref) async {
     final state = ref.read(wellnessControllerProvider).requireValue;
     final user = state.currentUser!;
+    final formKey = GlobalKey<FormState>();
     final name = TextEditingController(text: user.name);
     final age = TextEditingController(text: '${user.age}');
-    final gender = TextEditingController(text: user.gender);
+    var selectedGender =
+        genderOptions.contains(user.gender) ? user.gender : genderOptions.first;
     final height = TextEditingController(text: user.height.toStringAsFixed(0));
     final weight = TextEditingController(text: user.weight.toStringAsFixed(1));
 
-    await showModalBottomSheet(
+    await showAppModal<void>(
       context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: Wrap(
-          runSpacing: 12,
-          children: [
-            Text('Edit profile', style: Theme.of(context).textTheme.titleLarge),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
-            TextField(controller: age, decoration: const InputDecoration(labelText: 'Age'), keyboardType: TextInputType.number),
-            TextField(controller: gender, decoration: const InputDecoration(labelText: 'Gender')),
-            TextField(controller: height, decoration: const InputDecoration(labelText: 'Height (cm)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            TextField(controller: weight, decoration: const InputDecoration(labelText: 'Weight (kg)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            ElevatedButton(
-              onPressed: () async {
-                await ref.read(wellnessControllerProvider.notifier).updateProfile(
-                      name: name.text.trim(),
-                      age: int.parse(age.text.trim()),
-                      gender: gender.text.trim(),
-                      height: double.parse(height.text.trim()),
-                      weight: double.parse(weight.text.trim()),
-                    );
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Save profile'),
-            ),
-          ],
-        ),
-      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(18),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Edit profile',
+                            style: Theme.of(modalContext).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: name,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: age,
+                              decoration:
+                                  const InputDecoration(labelText: 'Age'),
+                              keyboardType: TextInputType.number,
+                              validator: (value) =>
+                                  int.tryParse(value?.trim() ?? '') == null
+                                      ? 'Enter age'
+                                      : null,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedGender,
+                              isExpanded: true,
+                              decoration:
+                                  const InputDecoration(labelText: 'Gender'),
+                              items: genderOptions
+                                  .map(
+                                    (value) => DropdownMenuItem(
+                                      value: value,
+                                      child: Text(value),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setModalState(() => selectedGender = value);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: height,
+                              decoration: const InputDecoration(
+                                  labelText: 'Height (cm)'),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              validator: (value) =>
+                                  double.tryParse(value?.trim() ?? '') == null
+                                      ? 'Enter height'
+                                      : null,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: weight,
+                              decoration: const InputDecoration(
+                                  labelText: 'Weight (kg)'),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              validator: (value) =>
+                                  double.tryParse(value?.trim() ?? '') == null
+                                      ? 'Enter weight'
+                                      : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(modalContext),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                if (!formKey.currentState!.validate()) return;
+                                final error = await ref
+                                    .read(wellnessControllerProvider.notifier)
+                                    .updateProfile(
+                                      name: name.text.trim(),
+                                      age: int.parse(age.text.trim()),
+                                      gender: selectedGender,
+                                      height: double.parse(height.text.trim()),
+                                      weight: double.parse(weight.text.trim()),
+                                    );
+                                if (!modalContext.mounted) return;
+                                if (error != null) {
+                                  ScaffoldMessenger.of(modalContext)
+                                      .showSnackBar(
+                                    SnackBar(content: Text(error)),
+                                  );
+                                  return;
+                                }
+                                Navigator.pop(modalContext);
+                              },
+                              child: const Text('Save'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
+
+    name.dispose();
+    age.dispose();
+    height.dispose();
+    weight.dispose();
   }
 }

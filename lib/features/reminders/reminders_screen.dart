@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../shared/app_scaffold.dart';
+import '../../shared/form_options.dart';
 import '../../shared/widgets.dart';
 import '../../state/wellness_controller.dart';
 
@@ -19,28 +21,36 @@ class RemindersScreen extends ConsumerWidget {
       title: 'Reminders',
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          NotificationService().init(); // Ask permission manually via plugin on add first reminder
+          if (!kIsWeb) {
+            NotificationService().init();
+          }
           _showAddReminder(context, ref);
         },
-        label: const Text('Add Reminder'),
+        label: const Text('Reminder'),
         icon: const Icon(Icons.add_alert_outlined),
       ),
       child: items.isEmpty
           ? const EmptyState(
               title: 'No reminders yet',
               message:
-                  'Add healthy routine reminders like workouts, hydration, or weight checks.')
+                  'Add healthy routine reminders like workouts, hydration, or weight checks.',
+            )
           : ListView.separated(
+              padding: const EdgeInsets.only(bottom: 96),
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (_, index) {
                 final reminder = items[index];
                 return SectionCard(
                   child: SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    title: Text(reminder.title, style: Theme.of(context).textTheme.titleMedium),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    title: Text(
+                      reminder.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -48,10 +58,19 @@ class RemindersScreen extends ConsumerWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                              const Icon(
+                                Icons.access_time,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
                               const SizedBox(width: 4),
-                              Text('${reminder.scheduledTime} · ${reminder.repeat}',
-                                  style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                              Text(
+                                '${reminder.scheduledTime} - ${optionLabel(reminder.repeat)}',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -67,49 +86,138 @@ class RemindersScreen extends ConsumerWidget {
   }
 
   Future<void> _showAddReminder(BuildContext context, WidgetRef ref) async {
+    final formKey = GlobalKey<FormState>();
     final title = TextEditingController();
     final message = TextEditingController();
-    final time = TextEditingController(text: '06:00 AM');
-    final repeat = TextEditingController(text: 'daily');
+    var selectedTime = const TimeOfDay(hour: 6, minute: 0);
+    var selectedRepeat = 'daily';
 
-    await showModalBottomSheet(
+    await showAppModal<void>(
       context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: Wrap(
-          runSpacing: 12,
-          children: [
-            Text('Add reminder', style: Theme.of(context).textTheme.titleLarge),
-            TextField(
-                controller: title,
-                decoration: const InputDecoration(labelText: 'Title')),
-            TextField(
-                controller: message,
-                decoration: const InputDecoration(labelText: 'Message')),
-            TextField(
-                controller: time,
-                decoration: const InputDecoration(labelText: 'Scheduled time')),
-            TextField(
-                controller: repeat,
-                decoration: const InputDecoration(
-                    labelText: 'Repeat (once/daily/weekly)')),
-            ElevatedButton(
-              onPressed: () async {
-                await ref.read(wellnessControllerProvider.notifier).addReminder(
-                      title: title.text.trim(),
-                      message: message.text.trim(),
-                      scheduledTime: time.text.trim(),
-                      repeat: repeat.text.trim().toLowerCase(),
-                    );
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Save reminder'),
-            ),
-          ],
-        ),
-      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(18),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Add reminder',
+                        style: Theme.of(modalContext).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: title,
+                        decoration: const InputDecoration(labelText: 'Title'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: message,
+                        minLines: 2,
+                        maxLines: 3,
+                        decoration: const InputDecoration(labelText: 'Message'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: modalContext,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedTime = picked);
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Scheduled time',
+                            suffixIcon: Icon(Icons.schedule_outlined),
+                          ),
+                          child: Text(selectedTime.format(modalContext)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedRepeat,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Repeat'),
+                        items: reminderRepeatOptions
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(optionLabel(value)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setModalState(() => selectedRepeat = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(modalContext),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                if (!formKey.currentState!.validate()) return;
+                                final error = await ref
+                                    .read(wellnessControllerProvider.notifier)
+                                    .addReminder(
+                                      title: title.text.trim(),
+                                      message: message.text.trim(),
+                                      scheduledTime:
+                                          selectedTime.format(modalContext),
+                                      repeat: selectedRepeat,
+                                    );
+                                if (!modalContext.mounted) return;
+                                if (error != null) {
+                                  ScaffoldMessenger.of(modalContext)
+                                      .showSnackBar(
+                                    SnackBar(content: Text(error)),
+                                  );
+                                  return;
+                                }
+                                Navigator.pop(modalContext);
+                              },
+                              child: const Text('Save'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
+
+    title.dispose();
+    message.dispose();
   }
 }
