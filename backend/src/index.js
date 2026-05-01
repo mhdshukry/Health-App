@@ -16,6 +16,7 @@ import { router as profileRouter } from "./routes/profile.js";
 import { router as remindersRouter } from "./routes/reminders.js";
 import { router as syncRouter } from "./routes/sync.js";
 import { router as tipsRouter } from "./routes/tips.js";
+import { router as vitalsRouter } from "./routes/vitals.js";
 import { Tip } from "./models/Tip.js";
 import { logInfo } from "./utils/logger.js";
 
@@ -43,6 +44,7 @@ app.use("/api/health-logs", auth, healthLogsRouter);
 app.use("/api/goals", auth, goalsRouter);
 app.use("/api/reminders", auth, remindersRouter);
 app.use("/api/tips", auth, tipsRouter);
+app.use("/api/vitals", auth, vitalsRouter);
 
 app.use(errorHandler);
 
