@@ -3,11 +3,52 @@ import 'package:intl/intl.dart';
 
 import '../core/theme/app_theme.dart';
 
-String formatDate(String iso) => DateFormat('dd MMM yyyy').format(DateTime.parse(iso));
-String formatDateTime(String iso) => DateFormat('dd MMM yyyy · hh:mm a').format(DateTime.parse(iso));
+DateTime parseLocalDate(String iso) => DateTime.parse(iso).toLocal();
+
+String formatDate(String iso) =>
+    DateFormat('dd MMM yyyy').format(parseLocalDate(iso));
+
+String formatDateTime(String iso) =>
+    DateFormat('dd MMM yyyy, hh:mm a').format(parseLocalDate(iso));
+
+Future<T?> showAppModal<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+}) {
+  return showDialog<T>(
+    context: context,
+    useRootNavigator: true,
+    builder: (dialogContext) {
+      final size = MediaQuery.sizeOf(dialogContext);
+      final viewInsets = MediaQuery.viewInsetsOf(dialogContext);
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + viewInsets.bottom),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 560,
+              maxHeight: size.height * 0.86,
+            ),
+            child: Material(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(28),
+              clipBehavior: Clip.antiAlias,
+              child: builder(dialogContext),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
 class SectionCard extends StatelessWidget {
-  const SectionCard({super.key, required this.child, this.padding = const EdgeInsets.all(18)});
+  const SectionCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+  });
+
   final Widget child;
   final EdgeInsets padding;
 
@@ -23,7 +64,14 @@ class SectionCard extends StatelessWidget {
 }
 
 class StatTile extends StatelessWidget {
-  const StatTile({super.key, required this.title, required this.value, this.subtitle, this.accent = AppColors.primary});
+  const StatTile({
+    super.key,
+    required this.title,
+    required this.value,
+    this.subtitle,
+    this.accent = AppColors.primary,
+  });
+
   final String title;
   final String value;
   final String? subtitle;
@@ -43,11 +91,23 @@ class StatTile extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 12),
-          Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 24)),
+          Text(
+            value,
+            style: Theme.of(context)
+                .textTheme
+                .headlineMedium
+                ?.copyWith(fontSize: 24),
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: accent)),
-          ]
+            Text(
+              subtitle!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: accent),
+            ),
+          ],
         ],
       ),
     );
@@ -56,6 +116,7 @@ class StatTile extends StatelessWidget {
 
 class EmptyState extends StatelessWidget {
   const EmptyState({super.key, required this.title, required this.message});
+
   final String title;
   final String message;
 
@@ -71,7 +132,11 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
         ),
       ),

@@ -78,6 +78,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       healthLogs: convert('healthLogs', HealthLog.fromMap),
       goals: convert('goals', Goal.fromMap),
       reminders: convert('reminders', Reminder.fromMap),
+      vitals: convert('vitals', VitalLog.fromMap),
       tips: convert('tips', HealthTip.fromMap).isEmpty
           ? seedTips
           : convert('tips', HealthTip.fromMap),
@@ -139,7 +140,7 @@ class WellnessController extends AsyncNotifier<WellnessState> {
   String _friendlyError(Object e) {
     final raw = e.toString().replaceFirst('Exception: ', '');
     if (raw.contains('SocketException')) {
-      return 'Cannot reach server. Make sure the backend is running at $apiBaseUrl and the emulator is online.';
+      return 'Cannot reach server. Make sure the backend is running at $apiBaseUrl.';
     }
     if (raw.contains('Invalid email or password')) {
       return 'Invalid email or password.';
@@ -156,7 +157,8 @@ class WellnessController extends AsyncNotifier<WellnessState> {
     if (raw.contains('Password must be at least')) {
       return 'Password must be at least 8 characters.';
     }
-    if (raw.contains('Name is required') || raw.contains('Valid email is required')) {
+    if (raw.contains('Name is required') ||
+        raw.contains('Valid email is required')) {
       return raw;
     }
     return raw;
@@ -267,9 +269,14 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       final user =
           AppUser.fromMap(Map<String, dynamic>.from(response['user'] as Map));
       final current = state.requireValue;
+      final users = [
+        for (final item in current.users)
+          if (item.id == user.id) user else item,
+        if (!current.users.any((item) => item.id == user.id)) user,
+      ];
       await _persist(current.copyWith(
         currentUser: user,
-        users: [user],
+        users: users,
         healthLogs: [...current.healthLogs, log],
       ));
       return null;
@@ -360,12 +367,73 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       if (updated.isActive) {
         await _scheduleReminderNotification(updated);
       } else {
-        await NotificationService().cancelAll(); // In a real app we'd keep map of IDs
+        await NotificationService()
+            .cancelAll(); // In a real app we'd keep map of IDs
       }
 
       return null;
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
+    }
+  }
+
+  Future<String?> addVitalLog({
+    required String category,
+    double? systolic,
+    double? diastolic,
+    double? heartRate,
+    double? bloodGlucose,
+    double? oxygenSaturation,
+    double? temperature,
+    double? waterMl,
+    double? sleepHours,
+    String? mood,
+    double? painLevel,
+    required String notes,
+    required DateTime date,
+  }) async {
+    try {
+      final response = await _api.addVitalLog(
+        category: category,
+        systolic: systolic,
+        diastolic: diastolic,
+        heartRate: heartRate,
+        bloodGlucose: bloodGlucose,
+        oxygenSaturation: oxygenSaturation,
+        temperature: temperature,
+        waterMl: waterMl,
+        sleepHours: sleepHours,
+        mood: mood,
+        painLevel: painLevel,
+        notes: notes,
+        date: date,
+      );
+      final vital =
+          VitalLog.fromMap(Map<String, dynamic>.from(response['vital'] as Map));
+      final current = state.requireValue;
+      await _persist(current.copyWith(vitals: [vital, ...current.vitals]));
+      return null;
+    } catch (e) {
+      return _friendlyError(e);
+    }
+  }
+
+  Future<String?> refreshExternalTips() async {
+    try {
+      final response = await _api.fetchExternalTips();
+      final rawTips = response['tips'];
+      if (rawTips is! List || rawTips.isEmpty) {
+        return 'No external health tips received.';
+      }
+      final tips = rawTips
+          .map((item) => HealthTip.fromMap(Map<String, dynamic>.from(item)))
+          .toList();
+      final current = state.requireValue;
+      await _persist(current.copyWith(tips: tips));
+      final fallback = response['sourceFallback'] == true;
+      return fallback ? 'External API unavailable. Showing cached tips.' : null;
+    } catch (e) {
+      return _friendlyError(e);
     }
   }
 
@@ -376,13 +444,13 @@ class WellnessController extends AsyncNotifier<WellnessState> {
     timeStr = timeStr.replaceAll(RegExp(r'[a-zA-Z\s]'), '');
     final parts = timeStr.split(':');
     if (parts.length != 2) return;
-    
+
     var hour = int.tryParse(parts[0]) ?? 8;
     final minute = int.tryParse(parts[1]) ?? 0;
-    
+
     if (isPM && hour < 12) hour += 12;
     if (!isPM && hour == 12) hour = 0;
-    
+
     final now = DateTime.now();
     var scheduledDate = DateTime(
       now.year,
@@ -429,6 +497,11 @@ class WellnessController extends AsyncNotifier<WellnessState> {
       : state.reminders
           .where((e) => e.userId == state.currentUser!.id)
           .toList();
+
+  List<VitalLog> userVitals(WellnessState state) => state.currentUser == null
+      ? []
+      : state.vitals.where((e) => e.userId == state.currentUser!.id).toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
 }
 
 class PasswordResetResult {
@@ -436,8 +509,4 @@ class PasswordResetResult {
 
   final String? token;
   final String? error;
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
