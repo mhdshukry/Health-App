@@ -114,7 +114,7 @@ class ApiService {
       }
     }
     if (response.statusCode >= 400) {
-      throw Exception((decoded['error'] ?? 'Request failed') as String);
+      throw Exception(decoded['error']?.toString() ?? 'Request failed');
     }
     return decoded;
   }
@@ -198,7 +198,15 @@ class ApiService {
 
   Future<void> logout() async {
     try {
-      await _request('/api/auth/logout', method: 'POST', retryOnAuth: false);
+      await _client.post(
+        _uri('/api/auth/logout'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+    } catch (_) {
+      // Logout should still succeed locally if the server session is gone.
     } finally {
       await clearAuthTokens();
     }
